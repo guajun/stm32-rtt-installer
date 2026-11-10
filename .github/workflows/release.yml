@@ -23,4 +23,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release create "$RELEASE_TAG" dist/install.ps1 dist/install.sh dist/SHA256SUMS --verify-tag --generate-notes --title "stm32-rtt $RELEASE_TAG"
+        run: gh release create "$RELEASE_TAG" dist/install.ps1 dist/install.sh dist/SHA256SUMS --verify-tag --generate-notes --title "stm32-rtt-installer $RELEASE_TAG"

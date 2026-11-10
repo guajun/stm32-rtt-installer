@@ -1,8 +1,8 @@
-# stm32-rtt · STM32CubeMX CMake RTT Installer
+# stm32-rtt-installer · STM32CubeMX CMake RTT Installer
 
 给 **STM32CubeMX 生成的 CMake 项目**添加 SEGGER RTT。一行启动，交互安装；参数齐全，Agent 无需应答。
 
-[安装页面与命令生成器](https://guajun.github.io/stm32-rtt/) · [Release 下载](https://github.com/guajun/stm32-rtt/releases/latest) · [CI](https://github.com/guajun/stm32-rtt/actions/workflows/ci.yml)
+[安装页面与命令生成器](https://guajun.github.io/stm32-rtt-installer/) · [Release 下载](https://github.com/guajun/stm32-rtt-installer/releases/latest) · [CI](https://github.com/guajun/stm32-rtt-installer/actions/workflows/ci.yml)
 
 > **不要用 `Middlewares` 做 RTT 文件夹名字！该目录由 CubeMX 管理。** 安装器会拒绝 `Middlewares`（不区分大小写），也会保护 `Core`、`Drivers`、`cmake`、`build` 等目录。推荐 `SEGGER_RTT` 或 `DebugRTT`。
 
@@ -30,13 +30,13 @@ Python 和 Git 是本工具安装阶段的依赖；RTT 固件运行及后续构�
 **Windows PowerShell（5.1 / 7）**
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt/releases/latest/download/install.ps1')))
+& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.ps1')))
 ```
 
 **POSIX Shell**
 
 ```sh
-curl -fsSL https://github.com/guajun/stm32-rtt/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.sh | sh
 ```
 
 ## Agent / 非交互式
@@ -44,11 +44,11 @@ curl -fsSL https://github.com/guajun/stm32-rtt/releases/latest/download/install.
 **传入任何参数后默认不再提问**，未提供的选项采用默认值。`-NonInteractive` / `--non-interactive` 可以显式使用全部默认值。失败返回非零退出码；成功输出摘要及最后一行 JSON。为可复现安装，固定安装器 Release URL 和 RTT tag / commit。
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt/releases/download/v1.0.0/install.ps1'))) -Project 'C:\firmware\my-board' -Version 'V8.58.0' -Directory 'SEGGER_RTT' -Mode submodule -NonInteractive
+& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt-installer/releases/download/v1.0.0/install.ps1'))) -Project 'C:\firmware\my-board' -Version 'V8.58.0' -Directory 'SEGGER_RTT' -Mode submodule -NonInteractive
 ```
 
 ```sh
-curl -fsSL https://github.com/guajun/stm32-rtt/releases/download/v1.0.0/install.sh | sh -s -- --project '/path/to/my-board' --version V8.58.0 --directory SEGGER_RTT --mode source --non-interactive
+curl -fsSL https://github.com/guajun/stm32-rtt-installer/releases/download/v1.0.0/install.sh | sh -s -- --project '/path/to/my-board' --version V8.58.0 --directory SEGGER_RTT --mode source --non-interactive
 ```
 
 | PowerShell | POSIX Shell | 默认值 / 说明 |
@@ -66,11 +66,11 @@ curl -fsSL https://github.com/guajun/stm32-rtt/releases/download/v1.0.0/install.
 列出可选 RTT 版本：
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt/releases/latest/download/install.ps1'))) -ListVersions
+& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.ps1'))) -ListVersions
 ```
 
 ```sh
-curl -fsSL https://github.com/guajun/stm32-rtt/releases/latest/download/install.sh | sh -s -- --list-versions
+curl -fsSL https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.sh | sh -s -- --list-versions
 ```
 
 ## 两种模式
