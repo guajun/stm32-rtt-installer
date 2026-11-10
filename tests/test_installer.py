@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,10 @@ class InstallationTests(unittest.TestCase):
         git(self.upstream, "commit", "-m", "fixture")
         git(self.upstream, "tag", "V8.9")
         git(self.upstream, "tag", "V8.10")
+        self.archive = self.root / "RTT fixture.zip"
+        with zipfile.ZipFile(self.archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for required in installer.REQUIRED:
+                bundle.write(self.upstream / required, "RTT-8.9/" + required)
         self.project = self.root / "project with spaces"
         (self.project / "cmake/stm32cubemx").mkdir(parents=True)
         (self.project / "cmake/stm32cubemx/CMakeLists.txt").write_text("")
@@ -54,7 +59,10 @@ class InstallationTests(unittest.TestCase):
         self.addCleanup(self.env.stop)
 
     def args(self, *extra):
-        return ["--project", str(self.project), "--repository", str(self.upstream), "--mode", "source", *extra]
+        base = ["--project", str(self.project)]
+        if "submodule" in extra:
+            return [*base, "--repository", str(self.upstream), *extra]
+        return [*base, "--archive", str(self.archive), "--mode", "source", *extra]
 
     def run_install(self, *extra):
         installer.main(self.args(*extra))
@@ -71,7 +79,8 @@ class InstallationTests(unittest.TestCase):
         self.assertNotIn(b"\n", before.replace(b"\r\n", b""))
 
     def test_latest_numeric_sort(self):
-        self.run_install()
+        with patch.object(installer, "api", side_effect=[[{"name": "V8.9"}, {"name": "V8.10"}], {"sha": "a" * 40}]), patch.object(installer, "read_url", return_value=self.archive.read_bytes()):
+            installer.main(["--project", str(self.project), "--mode", "source"])
         self.assertEqual(json.loads((self.project / installer.MANIFEST).read_text())["version"], "V8.10")
 
     def test_submodule_and_unrelated_staging(self):
@@ -94,7 +103,7 @@ class InstallationTests(unittest.TestCase):
     def test_invalid_version_and_existing_directory_leave_project_untouched(self):
         original = self.cmake.read_bytes()
         with self.assertRaises(installer.InstallError):
-            self.run_install("--version", "nonexistent")
+            self.run_install("--archive", str(self.root / "missing.zip"))
         self.assertFalse((self.project / "SEGGER_RTT").exists())
         (self.project / "SEGGER_RTT").mkdir()
         with self.assertRaises(installer.InstallError):
@@ -159,14 +168,144 @@ class InstallationTests(unittest.TestCase):
         shell = shutil.which("pwsh") or shutil.which("powershell")
         if not shell:
             self.skipTest("PowerShell not available")
-        subprocess.run([shell, "-NoProfile", "-File", str(ROOT / "dist/install.ps1"), "-Project", str(self.project), "-Repository", str(self.upstream), "-Mode", "source", "-Version", "V8.9"], check=True, stdout=subprocess.PIPE)
+        subprocess.run([shell, "-NoProfile", "-File", str(ROOT / "dist/install.ps1"), "-Project", str(self.project), "-Archive", str(self.archive), "-Mode", "source", "-Version", "V8.9"], check=True, stdout=subprocess.PIPE)
         self.assertTrue((self.project / installer.MANIFEST).is_file())
 
     def test_interactive_selection(self):
-        with patch.object(installer, "UPSTREAM", str(self.upstream)), patch.object(installer, "tags", return_value=["V8.9"]), patch.object(installer, "prompt", side_effect=[str(self.project), "V8.9", "MyRTT", "source", ""]), patch.object(installer, "install") as install:
+        with patch.object(installer, "prompt", side_effect=[str(self.project), "source", "release"]), patch.object(installer, "install") as install:
             installer.main([])
             args = install.call_args[0][0]
-            self.assertEqual((args.directory, args.mode, args.version), ("MyRTT", "source", "V8.9"))
+            self.assertEqual((args.directory, args.mode, args.version), ("SEGGER_RTT", "source", "release"))
+
+    def test_release_and_main_are_distinct_pinned_zip_downloads(self):
+        for requested, responses, expected_version in (("release", [{"tag_name": "V8.9"}, {"sha": "a" * 40}], "V8.9"), ("main", [{"sha": "b" * 40}], "main")):
+            with self.subTest(requested=requested), patch.object(installer, "api", side_effect=responses), patch.object(installer, "read_url", return_value=self.archive.read_bytes()) as download:
+                args = type("Args", (), dict(archive=None, repository=installer.UPSTREAM, version=requested, format="github-zip"))()
+                origin, version, commit = installer.archive_input(args)
+                self.assertEqual(version, expected_version)
+                self.assertTrue(origin.endswith(commit + ".zip"))
+                self.assertEqual(commit, ("a" if requested == "release" else "b") * 40)
+
+    def test_submodule_branch_is_pinned(self):
+        git(self.upstream, "branch", "snapshot-test")
+        self.run_install("--mode", "submodule", "--version", "snapshot-test")
+        state = json.loads((self.project / installer.MANIFEST).read_text())
+        self.assertEqual(state["commit"], git(self.upstream, "rev-parse", "snapshot-test"))
+
+    def test_no_git_no_network_local_zip(self):
+        with patch.object(installer.shutil, "which", return_value=None), patch.object(installer, "git", side_effect=AssertionError("Git called")), patch.object(installer, "read_url", side_effect=AssertionError("Network called")):
+            self.run_install()
+            self.run_install()
+        self.assertTrue((self.project / "SEGGER_RTT/LICENSE.md").is_file())
+
+    def test_pack_root_and_inferred_format(self):
+        pack = self.root / "SEGGER.RTT.pack"
+        with zipfile.ZipFile(pack, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for required in installer.REQUIRED:
+                bundle.write(self.upstream / required, required)
+            bundle.writestr("SEGGER.RTT.pdsc", "<package/>")
+        with patch.object(installer, "git", side_effect=AssertionError("Git called")), patch.object(installer, "read_url", side_effect=AssertionError("Network called")):
+            self.run_install("--archive", str(pack))
+        state = json.loads((self.project / installer.MANIFEST).read_text())
+        self.assertEqual(state["format"], "pack")
+        self.assertEqual(state["commit"], None)
+        self.assertEqual(state["archive_sha256"], installer.digest(pack))
+
+    def test_online_pack_release_uses_http_only(self):
+        pack = self.root / "test.pack"
+        with zipfile.ZipFile(pack, "w") as bundle:
+            for required in installer.REQUIRED:
+                bundle.write(self.upstream / required, required)
+            bundle.writestr("SEGGER.RTT.pdsc", "<package/>")
+        release = {"tag_name": "V8.9", "assets": [{"name": "RTT.pack", "browser_download_url": "https://example.com/RTT.pack"}]}
+        with patch.object(installer, "api", return_value=release) as api, patch.object(installer, "read_url", return_value=pack.read_bytes()), patch.object(installer, "git", side_effect=AssertionError("Git called")):
+            installer.main(["--project", str(self.project), "--format", "pack"])
+        api.assert_called_once_with("SEGGERMicro/RTT/releases/latest")
+
+    def test_explicit_https_zip_url(self):
+        with patch.object(installer, "read_url", return_value=self.archive.read_bytes()), patch.object(installer, "api", side_effect=AssertionError("API called")), patch.object(installer, "git", side_effect=AssertionError("Git called")):
+            self.run_install("--archive", "https://example.com/my-rtt.zip")
+        state = json.loads((self.project / installer.MANIFEST).read_text())
+        self.assertEqual(state["archive_origin"], "https://example.com/my-rtt.zip")
+
+    def test_sha256_mismatch_is_transactional(self):
+        original = self.cmake.read_bytes()
+        with self.assertRaisesRegex(installer.InstallError, "SHA256 mismatch"):
+            self.run_install("--sha256", "a" * 64)
+        self.assertEqual(self.cmake.read_bytes(), original)
+        self.assertFalse((self.project / "SEGGER_RTT").exists())
+
+    def test_modified_input_archive_detected_on_repeat(self):
+        self.run_install()
+        with zipfile.ZipFile(self.archive, "a") as bundle:
+            bundle.writestr("extra.txt", "changed")
+        with self.assertRaisesRegex(installer.InstallError, "Local archive has changed"):
+            self.run_install()
+
+    def test_archive_root_security_and_shape(self):
+        original = self.cmake.read_bytes()
+        scenarios = {
+            "traversal": [("../escape.c", "x")],
+            "absolute": [("/escape.c", "x")],
+            "backslash": [("a\\escape.c", "x")],
+            "noncanonical": [("a//escape.c", "x")],
+            "drive": [("C:/escape.c", "x")],
+            "reserved": [("NUL.txt", "x")],
+            "duplicates": [("RTT/a.c", "x"), ("RTT/A.c", "y")],
+            "multiple-roots": [(prefix + required, "x") for prefix in ("a/", "b/") for required in installer.REQUIRED],
+            "too-deep": [("a/b/" + required, "x") for required in installer.REQUIRED],
+        }
+        for scenario, entries in scenarios.items():
+            with self.subTest(scenario=scenario):
+                with zipfile.ZipFile(self.archive, "w") as bundle:
+                    for name, value in entries:
+                        bundle.writestr(name, value)
+                with self.assertRaises(installer.InstallError):
+                    self.run_install()
+                self.assertEqual(self.cmake.read_bytes(), original)
+                self.assertFalse((self.project / "SEGGER_RTT").exists())
+
+    def test_symlink_archive_rejected(self):
+        with zipfile.ZipFile(self.archive, "w") as bundle:
+            info = zipfile.ZipInfo("link")
+            info.create_system = 3
+            info.external_attr = 0o120777 << 16
+            bundle.writestr(info, "../outside")
+        with self.assertRaisesRegex(installer.InstallError, "symlinks"):
+            self.run_install()
+
+    def test_no_directory_or_other_archive_formats(self):
+        for path in (self.upstream, self.root / "RTT.tar.gz", self.root / "RTT.7z"):
+            with self.subTest(path=path), self.assertRaises(installer.InstallError):
+                self.run_install("--archive", str(path))
+
+    def test_source_list_versions_without_git(self):
+        with patch.object(installer.shutil, "which", return_value=None), patch.object(installer, "api", return_value=[{"name": "V8.9"}]), patch.object(installer, "git", side_effect=AssertionError("Git called")):
+            installer.main(["--mode", "source", "--list-versions"])
+
+    def test_pack_versions_only_offer_releases_with_pack(self):
+        releases = [{"tag_name": "V8.9", "assets": [{"name": "RTT.pack"}]}, {"tag_name": "V8.8", "assets": []}]
+        with patch.object(installer, "api", return_value=releases), patch.object(installer, "git", side_effect=AssertionError("Git called")):
+            versions = installer.available_versions(type("Args", (), {"mode": "source", "format": "pack", "repository": installer.UPSTREAM})())
+        self.assertEqual(versions, ["V8.9"])
+
+    def test_local_source_in_subprocess_with_empty_path(self):
+        environment = dict(os.environ, PATH="")
+        subprocess.run([sys.executable, str(ROOT / "src/installer.py"), "--project", str(self.project), "--archive", str(self.archive)], check=True, env=environment, stdout=subprocess.PIPE)
+        self.assertTrue((self.project / installer.MANIFEST).is_file())
+
+    def test_source_commit_download_does_not_resolve_moving_tag(self):
+        with patch.object(installer, "api", side_effect=AssertionError("API called")), patch.object(installer, "read_url", return_value=self.archive.read_bytes()) as download:
+            installer.main(["--project", str(self.project), "--mode", "source", "--version", "a" * 40])
+        self.assertIn("/archive/" + "a" * 40 + ".zip", download.call_args[0][0])
+
+    def test_pack_requires_description_and_unsupported_compression(self):
+        with self.assertRaisesRegex(installer.InstallError, "pdsc"):
+            self.run_install("--format", "pack")
+        with zipfile.ZipFile(self.archive, "w", zipfile.ZIP_BZIP2) as bundle:
+            bundle.writestr("file", "x")
+        with self.assertRaisesRegex(installer.InstallError, "stored/deflated"):
+            self.run_install()
 
 
 if __name__ == "__main__":
