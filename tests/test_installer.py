@@ -172,10 +172,25 @@ class InstallationTests(unittest.TestCase):
         self.assertTrue((self.project / installer.MANIFEST).is_file())
 
     def test_interactive_selection(self):
-        with patch.object(installer, "prompt", side_effect=[str(self.project), "source", "github-zip", str(self.archive), "MyRTT", ""]), patch.object(installer, "install") as install:
+        with patch.object(installer, "prompt", side_effect=[str(self.project), "source", "release"]), patch.object(installer, "install") as install:
             installer.main([])
             args = install.call_args[0][0]
-            self.assertEqual((args.directory, args.mode, args.archive), ("MyRTT", "source", str(self.archive.resolve())))
+            self.assertEqual((args.directory, args.mode, args.version), ("SEGGER_RTT", "source", "release"))
+
+    def test_release_and_main_are_distinct_pinned_zip_downloads(self):
+        for requested, responses, expected_version in (("release", [{"tag_name": "V8.9"}, {"sha": "a" * 40}], "V8.9"), ("main", [{"sha": "b" * 40}], "main")):
+            with self.subTest(requested=requested), patch.object(installer, "api", side_effect=responses), patch.object(installer, "read_url", return_value=self.archive.read_bytes()) as download:
+                args = type("Args", (), dict(archive=None, repository=installer.UPSTREAM, version=requested, format="github-zip"))()
+                origin, version, commit = installer.archive_input(args)
+                self.assertEqual(version, expected_version)
+                self.assertTrue(origin.endswith(commit + ".zip"))
+                self.assertEqual(commit, ("a" if requested == "release" else "b") * 40)
+
+    def test_submodule_branch_is_pinned(self):
+        git(self.upstream, "branch", "snapshot-test")
+        self.run_install("--mode", "submodule", "--version", "snapshot-test")
+        state = json.loads((self.project / installer.MANIFEST).read_text())
+        self.assertEqual(state["commit"], git(self.upstream, "rev-parse", "snapshot-test"))
 
     def test_no_git_no_network_local_zip(self):
         with patch.object(installer.shutil, "which", return_value=None), patch.object(installer, "git", side_effect=AssertionError("Git called")), patch.object(installer, "read_url", side_effect=AssertionError("Network called")):

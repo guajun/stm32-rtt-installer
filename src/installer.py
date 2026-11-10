@@ -88,8 +88,12 @@ def archive_input(args):
         return str(path), args.version if args.version != "latest" else "local", None
     repo = github_repo(args.repository)
     version = args.version
+    if version == "release" and args.format != "pack":
+        version = api(repo + "/releases/latest")["tag_name"]
     if args.format == "pack":
-        release = api(repo + ("/releases/latest" if version == "latest" else "/releases/tags/" + urllib.parse.quote(version, safe="")))
+        if version == "main":
+            raise InstallError("main is a source snapshot, not a pack Release; use --format github-zip.")
+        release = api(repo + ("/releases/latest" if version in ("latest", "release") else "/releases/tags/" + urllib.parse.quote(version, safe="")))
         assets = [asset for asset in release["assets"] if asset["name"].lower().endswith(".pack")]
         if len(assets) != 1:
             raise InstallError("Expected exactly one .pack release asset; pass --archive with its URL explicitly.")
@@ -293,6 +297,8 @@ def install(args):
         if module_store.exists():
             raise InstallError("Git metadata for stm32-rtt already exists; inspect it before installing.")
     version = args.version
+    if args.mode == "submodule" and version == "release":
+        version = api(github_repo(args.repository) + "/releases/latest")["tag_name"]
     if args.mode == "submodule" and version == "latest":
         releases = [t for t in tags(args.repository) if re.fullmatch(r"[vV]?\d+(?:\.\d+)+", t)]
         if not releases:
@@ -303,8 +309,16 @@ def install(args):
         archive_sha = archive_origin = None
         if args.mode == "submodule":
             out("clone", "--quiet", "--no-checkout", "--", args.repository, checkout)
-            ref = version if re.fullmatch(r"[0-9a-fA-F]{40}", version) else "refs/tags/" + version
-            commit = out("rev-parse", "--verify", ref + "^{commit}", cwd=checkout)
+            candidates = [version] if re.fullmatch(r"[0-9a-fA-F]{40}", version) else ["refs/tags/" + version, "refs/remotes/origin/" + version]
+            commit = None
+            for ref in candidates:
+                resolved = git("rev-parse", "--verify", ref + "^{commit}", cwd=checkout, check=False)
+                if resolved.returncode == 0:
+                    commit = resolved.stdout.decode().strip()
+                    break
+            if commit is None:
+                out("fetch", "--quiet", "origin", version, cwd=checkout)
+                commit = out("rev-parse", "--verify", "FETCH_HEAD^{commit}", cwd=checkout)
             out("checkout", "--quiet", "--detach", commit, cwd=checkout)
         else:
             archive_origin, version, commit = archive_input(args)
@@ -367,9 +381,9 @@ def install(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="stm32-rtt-installer", description=__doc__, epilog=WARNING)
     parser.add_argument("--project", default=".", help="CubeMX CMake project root (default: current directory)")
-    parser.add_argument("--version", default="latest", help="upstream tag, full commit SHA, or latest release tag")
+    parser.add_argument("--version", default="latest", help="release = latest formal Release; main = latest source snapshot; tag/ref/full SHA; latest retains numeric-tag behavior")
     parser.add_argument("--directory", default="SEGGER_RTT", help="single folder name; never Middlewares")
-    parser.add_argument("--mode", choices=("submodule", "source"), help="default: submodule; --archive/--format imply source")
+    parser.add_argument("--mode", choices=("submodule", "source"), help="default: source (copy); submodule explicitly enables Git integration")
     parser.add_argument("--format", choices=("pack", "github-zip"), help="source format; inferred from archive extension, otherwise github-zip")
     parser.add_argument("--archive", help="HTTPS URL or local .pack/.zip file; no directories, no Git required")
     parser.add_argument("--sha256", help="expected source archive SHA256 (optional)")
@@ -379,23 +393,13 @@ def main(argv=None):
     parser.add_argument("--repository", default=UPSTREAM, help="Git mirror URL (default: SEGGER official repository)")
     argv = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(argv)
-    args.mode = args.mode or ("source" if args.archive or args.format else "submodule")
+    args.mode = args.mode or "source"
     if not argv:
         args.project = prompt("CubeMX CMake project root", args.project)
         args.mode = prompt("Install mode (submodule / source)", args.mode)
         if args.mode not in ("submodule", "source"):
             raise InstallError("Mode must be submodule or source.")
-        if args.mode == "source":
-            args.format = prompt("Archive format (pack / github-zip)", "github-zip")
-            args.archive = prompt("Local .pack/.zip or HTTPS URL (empty = official online download)", "") or None
-        if not args.archive:
-            if args.mode == "source":
-                print("Available versions: " + ", ".join(available_versions(args)))
-            elif shutil.which("git"):
-                print("Available upstream tags: " + ", ".join(tags(args.repository)))
-            args.version = prompt("RTT version (tag / full SHA / latest)", args.version)
-        args.directory = prompt("RTT folder (NOT Middlewares)", args.directory)
-        args.target = prompt("CMake target (empty = project name)", "") or None
+        args.version = prompt("Version (release = formal Release / main = source snapshot / tag or ref)", "release")
     if args.mode == "submodule":
         if args.archive or args.format or args.sha256:
             parser.error("--archive, --format and --sha256 apply only to source mode.")

@@ -40,16 +40,18 @@ def run(command, log, cwd=None, env=None):
 
 
 def install_command(project, options):
+    version = next((value for key, value in options if key == "Version"), VERSION)
+    options = [(key, value) for key, value in options if key != "Version"]
     if os.name == "nt":
         shell = shutil.which("powershell")
         def quote(value):
             return "'" + str(value).replace("'", "''") + "'"
         command = "& ([scriptblock]::Create([IO.File]::ReadAllText({}))) -Project {} -Version {} -NonInteractive".format(
-            quote(ROOT / "dist/install.ps1"), quote(project), quote(VERSION))
+            quote(ROOT / "dist/install.ps1"), quote(project), quote(version))
         for key, value in options:
             command += " -" + key + " " + quote(value)
         return [shell, "-NoProfile", "-Command", command]
-    command = ["/bin/sh", str(ROOT / "dist/install.sh"), "--project", str(project), "--version", VERSION, "--non-interactive"]
+    command = ["/bin/sh", str(ROOT / "dist/install.sh"), "--project", str(project), "--version", version, "--non-interactive"]
     for key, value in options:
         command += ["--" + key.lower(), str(value)]
     return command
@@ -100,6 +102,10 @@ def main():
         ("local pack no git", local_options("RTT.pack"), True),
         ("local github zip no git", local_options("RTT.zip"), True),
         ("submodule", [("Mode", "submodule")], False),
+        ("release copy", [("Mode", "source"), ("Version", "release")], False),
+        ("main copy", [("Mode", "source"), ("Version", "main")], False),
+        ("release submodule", [("Mode", "submodule"), ("Version", "release")], False),
+        ("main submodule", [("Mode", "submodule"), ("Version", "main")], False),
     ]
     results = []
     for name, options, offline in cases:
@@ -107,10 +113,11 @@ def main():
         destination = work / name
         result = dict(case=name, platform=host, project=str(destination), builds=[], passed=False)
         log_path = report_dir / (name.replace(" ", "-") + ".log")
+        submodule = options is not None and ("Mode", "submodule") in options
         try:
             shutil.copytree(fixture, destination, ignore=shutil.ignore_patterns(".git", "build", "SEGGER_RTT", ".stm32-rtt.json"))
             with log_path.open("w", encoding="utf-8") as log:
-                if name == "submodule":
+                if submodule:
                     # The provided fixture ignores all files. Adjust only this test copy.
                     (destination / ".gitignore").write_text("build/\n", encoding="utf-8")
                     for command in (["git", "init"], ["git", "config", "user.name", "RTT E2E"],
@@ -148,7 +155,7 @@ def main():
                     main = main.replace("/* USER CODE BEGIN Includes */", '/* USER CODE BEGIN Includes */\n#include "SEGGER_RTT.h"', 1)
                     main = main.replace("/* USER CODE BEGIN 2 */", '/* USER CODE BEGIN 2 */\n  SEGGER_RTT_WriteString(0, "E2E RTT\\n");\n  SEGGER_RTT_printf(0, "E2E value=%u\\n", 123u);', 1)
                     main_file.write_bytes(main.encode("utf-8"))
-                    if name == "submodule":
+                    if submodule:
                         assert "160000" in run(["git", "ls-files", "--stage", "SEGGER_RTT"], log, cwd=destination)
                     else:
                         assert not (destination / "SEGGER_RTT/.git").exists()
