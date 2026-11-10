@@ -1,4 +1,4 @@
-# stm32-rtt
+# stm32-rtt · STM32CubeMX CMake RTT Installer
 
 给 **STM32CubeMX 生成的 CMake 项目**添加 SEGGER RTT。一行启动，交互安装；参数齐全，Agent 无需应答。
 
@@ -8,11 +8,20 @@
 
 ## 前置条件
 
-- Git、Python **3.8+** 在 PATH 中；Python 无第三方依赖。Windows 也支持 `py -3`。
-- Windows PowerShell **5.1+** / PowerShell 7，或 POSIX Shell（Linux / macOS / Git Bash）。
+- **安装器运行时**：Python **3.8+** 和 Git 在 PATH 中；Python 无第三方依赖。Windows 也支持 `py -3`。Python 执行安装逻辑，Git 获取上游代码。
+- **启动入口**：Windows PowerShell **5.1+** / PowerShell 7，或 POSIX Shell（Linux / macOS / Git Bash）。POSIX 一行下载命令还需要 `curl`；已下载的本地脚本无需 curl。Windows 一行命令使用 PowerShell 内置的 `Invoke-RestMethod`。
 - 项目包含顶层 `CMakeLists.txt` 和 `cmake/stm32cubemx/CMakeLists.txt`。
 - submodule 模式：项目目录须为 Git 仓库根目录，至少有一次提交，`.gitmodules` 无待提交改动。
 - 安装阶段需要能访问 SEGGER 官方 Git 仓库；安装完成后构建无需联网。
+
+| v1.0.0 安装模式 | 需要 Git 命令 | 项目需要是 Git 仓库 | 支持的版本选择 |
+| --- | --- | --- | --- |
+| `submodule` | 是，获取代码并注册 submodule | 是，仓库根目录且已有提交 | tag / 完整 commit SHA / latest；最终固定为 commit |
+| `source` 纯源码 | **是，目前通过 git clone 获取代码后复制源码** | **否** | tag / 完整 commit SHA / latest；最终记录实际 commit |
+
+**不创建 submodule，并不等于当前安装器不需要 Git。** v1.0.0 的纯源码模式不要求项目有 `.git`，安装完成的 RTT 目录也没有 Git 元数据，但获取源码时仍会调用 Git。当前尚未实现直接下载源码 ZIP、Release 附件或从本地包导入。
+
+Python 和 Git 是本工具安装阶段的依赖；RTT 固件运行及后续构建不依赖本安装器的 Python。后续固件构建仍需要项目原有的 CMake、构建工具和 ARM 工具链，安装器本身不会调用它们。
 
 ## 一行安装
 
@@ -67,7 +76,7 @@ curl -fsSL https://github.com/guajun/stm32-rtt/releases/latest/download/install.
 ## 两种模式
 
 - **submodule**：保留官方仓库来源和固定 commit，方便后续管理。会暂存 `.gitmodules` 与 RTT gitlink；请检查后把所有安装文件一起提交。其他文件已有的暂存状态保留。别人克隆项目时用 `git clone --recurse-submodules`，或运行 `git submodule update --init --recursive`。
-- **source**：复制所选版本全部源码（含许可证）并移除 Git 元数据，不要求项目已初始化 Git。适合交付源码、离线构建与不希望管理 submodule 的项目。
+- **source**：通过 Git 获取所选版本，复制全部源码（含许可证）并移除 Git 元数据。机器仍须安装 Git，但目标项目无需初始化 Git。适合交付源码、离线构建与不希望管理 submodule 的项目。与 submodule 一样，可指定 tag 或完整 commit，并不限于 tag。
 
 ## 安装会改什么
 
