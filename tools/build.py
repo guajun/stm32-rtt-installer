@@ -1,19 +1,23 @@
 """Build standalone release entrypoints. No third-party build dependencies."""
 import base64
 import hashlib
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-payload = base64.b64encode((ROOT / "src/installer.py").read_bytes()).decode("ascii")
-loader = "import base64;exec(compile(base64.b64decode('{}'),'stm32-rtt','exec'))".format(payload)
+payload = base64.b64encode(zlib.compress((ROOT / "src/installer.py").read_bytes(), 9)).decode("ascii")
+loader = "import base64,zlib;exec(compile(zlib.decompress(base64.b64decode('{}')),'stm32-rtt-installer','exec'))".format(payload)
 ps = '''#requires -Version 5.1
-<# Standalone STM32 RTT installer. Git + Python 3.8+ required. #>
+<# Standalone installer. Python 3.8+ required. Git only for submodule mode. #>
 [CmdletBinding()]
 param(
     [string]$Project,
     [string]$Version,
     [string]$Directory,
     [ValidateSet('submodule', 'source')][string]$Mode,
+    [ValidateSet('pack', 'github-zip')][string]$Format,
+    [string]$Archive,
+    [string]$Sha256,
     [string]$Target,
     [string]$Repository,
     [switch]$NonInteractive,
@@ -22,7 +26,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $forward = @()
-foreach ($name in @('Project', 'Version', 'Directory', 'Mode', 'Target', 'Repository')) {
+foreach ($name in @('Project', 'Version', 'Directory', 'Mode', 'Format', 'Archive', 'Sha256', 'Target', 'Repository')) {
     if ($PSBoundParameters.ContainsKey($name)) {
         $forward += '--' + $name.ToLowerInvariant()
         $forward += [string]$PSBoundParameters[$name]
@@ -51,7 +55,7 @@ $loader = '__LOADER__'
 if ($LASTEXITCODE -ne 0) { throw "stm32-rtt failed (exit $LASTEXITCODE)." }
 '''.replace("__LOADER__", loader.replace("'", "''"))
 sh = '''#!/bin/sh
-# Standalone POSIX installer. Git + Python 3.8+ required.
+# Standalone installer. Python 3.8+ required. Git only for submodule mode.
 set -eu
 python_cmd=
 for candidate in python3 python; do
