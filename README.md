@@ -43,6 +43,8 @@ sh dist/install.sh
 
 传入任何参数后默认不提问。PowerShell 参数与 Shell 参数对应见下表。
 
+Pages 命令生成器在“文件格式 → 文件来源 → 在线 RTT 版本”的顺序中使用原生版本下拉框。只有“官方在线获取”启用在线版本；指定 URL 或本地文件时置灰且命令省略版本参数。ZIP / submodule 从官方 tag 列表加载版本，pack 从带单个 pack 附件的正式 Release 加载。失败时显示原因、重试按钮和手动输入入口；submodule 使用单独的 Git 版本控件，可输入完整 commit。
+
 ```powershell
 # 官方 Release pack，无需 Git
 .\dist\install.ps1 -Project 'C:\firmware\board' -Mode source -Format pack -Version V8.58.0
@@ -120,6 +122,7 @@ submodule 暂存 .gitmodules 与 gitlink，请连同安装文件审阅提交。�
 ```sh
 python tools/build.py
 python -m unittest discover -s tests -v
+node --test tests/test_page.cjs
 ```
 
 CI 在 Windows / Linux / macOS 测试，覆盖无 Git/无网络本地安装、HTTP 下载、格式与根目录、恶意路径、回滚和脚本入口。Windows 额外检查 PowerShell 5.1。PR 预览不替换正式 Release。
