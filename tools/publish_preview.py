@@ -66,6 +66,7 @@ def main():
             run("git", "commit", "-m", "Publish PR #{} preview at {}".format(args.pr, sha[:7]), cwd=checkout)
             run("git", "push", "origin", "gh-pages", cwd=checkout)
     run("gh", "api", "--method", "PUT", "repos/" + REPO + "/pages", "-f", "build_type=legacy", "-f", "source[branch]=gh-pages", "-f", "source[path]=/")
+    run("gh", "api", "--method", "POST", "repos/" + REPO + "/pages/builds")
     print(preview_url)
 
 

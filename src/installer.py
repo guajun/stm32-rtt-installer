@@ -117,7 +117,7 @@ def unpack_archive(archive, destination, archive_format):
             for item in members:
                 name = item.filename.rstrip("/")
                 parts = PurePosixPath(name).parts
-                if not parts or name.startswith("/") or "\\" in name or any(part in (".", "..") or ":" in part or part.endswith((" ", ".")) or re.fullmatch(r"(?i)(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?", part) for part in parts):
+                if not parts or name != PurePosixPath(name).as_posix() or name.startswith("/") or "\\" in name or any(part in (".", "..") or ":" in part or part.endswith((" ", ".")) or re.fullmatch(r"(?i)(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?", part) for part in parts):
                     raise InstallError("Unsafe archive path: " + name)
                 if stat.S_ISLNK(item.external_attr >> 16) or item.flag_bits & 1:
                     raise InstallError("Archive symlinks and encrypted entries are not supported.")

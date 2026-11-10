@@ -175,7 +175,7 @@ class InstallationTests(unittest.TestCase):
         with patch.object(installer, "prompt", side_effect=[str(self.project), "source", "github-zip", str(self.archive), "MyRTT", ""]), patch.object(installer, "install") as install:
             installer.main([])
             args = install.call_args[0][0]
-            self.assertEqual((args.directory, args.mode, args.archive), ("MyRTT", "source", str(self.archive)))
+            self.assertEqual((args.directory, args.mode, args.archive), ("MyRTT", "source", str(self.archive.resolve())))
 
     def test_no_git_no_network_local_zip(self):
         with patch.object(installer.shutil, "which", return_value=None), patch.object(installer, "git", side_effect=AssertionError("Git called")), patch.object(installer, "read_url", side_effect=AssertionError("Network called")):
@@ -233,6 +233,7 @@ class InstallationTests(unittest.TestCase):
             "traversal": [("../escape.c", "x")],
             "absolute": [("/escape.c", "x")],
             "backslash": [("a\\escape.c", "x")],
+            "noncanonical": [("a//escape.c", "x")],
             "drive": [("C:/escape.c", "x")],
             "reserved": [("NUL.txt", "x")],
             "duplicates": [("RTT/a.c", "x"), ("RTT/A.c", "y")],
