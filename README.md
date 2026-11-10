@@ -124,6 +124,8 @@ python -m unittest discover -s tests -v
 
 CI 在 Windows / Linux / macOS 测试，覆盖无 Git/无网络本地安装、HTTP 下载、格式与根目录、恶意路径、回滚和脚本入口。Windows 额外检查 PowerShell 5.1。PR 预览不替换正式 Release。
 
+真实 CubeMX 工程的 Windows / WSL 测试使用 `tools/test_project.py`，覆盖 8 个场景 × Debug/Release，包含实际 RTT 调用与 ELF 符号检查。工程只复制到新的工作目录，原工程不会修改。参见 [Windows / WSL 端到端报告](docs/testing/windows-wsl-e2e.md)。用户的本地测试工程不随仓库分发。
+
 维护者可在提交并推送 PR head 后运行 `python tools/publish_preview.py --pr <编号> --work-dir <已有临时工作目录>`，发布 `/pr/<编号>/` 的页面与独立脚本。发布工具保留 main 文档作为主站、保留其他 PR 预览，并将 Pages 的部署源设为 gh-pages 分支根目录。预览横幅和 preview.json 记录实际 PR head commit。
 
 工具 MIT；RTT 保留 [SEGGER 官方许可证](https://github.com/SEGGERMicro/RTT/blob/main/LICENSE.md)。[RTT 文档](https://kb.segger.com/RTT)。不隶属于 ST 或 SEGGER。
