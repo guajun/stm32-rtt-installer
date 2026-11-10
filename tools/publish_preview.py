@@ -56,7 +56,8 @@ def main():
         preview.mkdir(parents=True, exist_ok=True)
         html = (ROOT / "docs/index.html").read_text(encoding="utf-8")
         html = html.replace("https://github.com/guajun/stm32-rtt-installer/releases/download/v1.1.0/", preview_url)
-        html = html.replace("v1.1 开发预览 · 正式 Release 仍为 v1.0。请使用此预览的脚本检查新功能。", 'PR #{} 预览 · {} · {} · <a href="https://github.com/{}/pull/{}">审阅 Pull Request ↗</a> · 下方命令运行本分支脚本，正式站点保持稳定版。'.format(args.pr, pr["headRefName"], sha[:7], REPO, args.pr))
+        banner = '<aside id="preview-banner" class="preview-banner">PR #{} 预览 · {} · {} · <a href="https://github.com/{}/pull/{}">审阅 Pull Request ↗</a> · 下方命令运行本分支脚本。</aside>'.format(args.pr, pr["headRefName"], sha[:7], REPO, args.pr)
+        html = html.replace("<main>", "<main>\n" + banner, 1)
         (preview / "index.html").write_bytes(html.encode("utf-8"))
         for name in ("install.ps1", "install.sh", "SHA256SUMS"):
             shutil.copyfile(ROOT / "dist" / name, preview / name)

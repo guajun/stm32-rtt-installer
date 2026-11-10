@@ -2,7 +2,19 @@
 
 给 STM32CubeMX CMake 工程一键接入 SEGGER RTT。自动接入源文件与 include 路径，保护 CubeMX 管理目录；支持幂等检查、固定来源和 Agent 非交互模式。默认复制源码，无需 Git。
 
-**此分支为 v1.1 预览，尚未发布正式 Release。** PR 的 Pages 预览同时提供本分支脚本；以下示例采用本地构建。公开 `releases/latest` 仍为 v1.0，不能用于测试新增压缩包功能。
+[正式安装页面](https://guajun.github.io/stm32-rtt-installer/) · [v1.1.0 Release](https://github.com/guajun/stm32-rtt-installer/releases/tag/v1.1.0)
+
+在 CubeMX CMake 项目目录中一行启动交互安装：
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.ps1')))
+```
+
+```sh
+curl -fsSL https://github.com/guajun/stm32-rtt-installer/releases/latest/download/install.sh | sh
+```
+
+后续 `dist/install.*` 示例用于下载脚本或本地构建后的调用；Agent 可将相同参数追加到在线一行命令。
 
 > **不要使用 Middlewares 作为文件夹名，该目录由 CubeMX 管理。** 安装器也会拒绝 Core、Drivers、cmake、build 等受保护名称。推荐 SEGGER_RTT 或 DebugRTT。
 
