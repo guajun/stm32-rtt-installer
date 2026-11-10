@@ -34,6 +34,8 @@ def main():
     run(sys.executable, str(ROOT / "tools/build.py"))
     run("git", "fetch", "origin", "main")
     branch_exists = bool(run("git", "ls-remote", "--heads", "origin", "gh-pages"))
+    pages = json.loads(run("gh", "api", "repos/" + REPO + "/pages"))
+    source_changed = pages.get("source") != {"branch": "gh-pages", "path": "/"}
     preview_url = SITE + "pr/{}/".format(args.pr)
     with tempfile.TemporaryDirectory(prefix="rtt-pages-", dir=args.work_dir) as scratch:
         checkout = Path(scratch)
@@ -65,8 +67,10 @@ def main():
         if changes.returncode:
             run("git", "commit", "-m", "Publish PR #{} preview at {}".format(args.pr, sha[:7]), cwd=checkout)
             run("git", "push", "origin", "gh-pages", cwd=checkout)
-    run("gh", "api", "--method", "PUT", "repos/" + REPO + "/pages", "-f", "build_type=legacy", "-f", "source[branch]=gh-pages", "-f", "source[path]=/")
-    run("gh", "api", "--method", "POST", "repos/" + REPO + "/pages/builds")
+    if source_changed:
+        run("gh", "api", "--method", "PUT", "repos/" + REPO + "/pages", "-f", "build_type=legacy", "-f", "source[branch]=gh-pages", "-f", "source[path]=/")
+        run("gh", "api", "--method", "POST", "repos/" + REPO + "/pages/builds")
+    # With the source already configured, the push itself schedules one build.
     print(preview_url)
 
 
